@@ -7,6 +7,14 @@ import torch.nn.functional as F
 from torch import optim
 from Models import Mnist_2NN, Mnist_CNN
 from clients import ClientsGroup, client
+from pyrootutils.pyrootutils import setup_root
+
+root = setup_root(".", ".root", pythonpath=True)
+
+from utils.backslash import backslash
+from utils.params import eva_shape_param
+from utils.codelength import cal_gradient_length
+from utils.params import get_params
 
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="FedAvg")
@@ -44,6 +52,24 @@ if __name__=="__main__":
         net = Mnist_2NN()
     elif args['model_name'] == 'mnist_cnn':
         net = Mnist_CNN()
+
+    # 在这里添加BackSlash
+    gt = torch.load(f"{root}/tables/gamma_table.pt", weights_only=True)
+    rgt = torch.load(f"{root}/tables/r_gamma_table.pt", weights_only=True)
+    shape, std, N = eva_shape_param(net, gt, rgt)
+    print("Before BackSlash:", shape, std, N)
+    params = get_params(net)
+    lengths = cal_gradient_length(params, 16)
+    print(lengths)
+
+    for _ in range(300):
+        backslash(net, gt, rgt, 1e5)
+
+    shape, std, N = eva_shape_param(net, gt, rgt)
+    print("After BackSlash", shape, std, N)
+    params = get_params(net)
+    lengths = cal_gradient_length(params, 16)
+    print(lengths)
 
     if torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
