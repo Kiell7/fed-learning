@@ -17,7 +17,7 @@ Some codes refers to https://github.com/Zing22/tf-fed-demo， https://tensorflow
 
 2.pytorch1.4.0
 
-both of them run on GPU
+both of them run on GPU 
 
 ### prepare data sets
 
