@@ -7,7 +7,7 @@ Some codes refers to https://github.com/Zing22/tf-fed-demo， https://tensorflow
 ### environment
 ##### Tensorflow-version
 
-1.python3.7.6
+1.python3.7.6 
 
 2.tensorflow1.13.1
 
@@ -17,7 +17,7 @@ Some codes refers to https://github.com/Zing22/tf-fed-demo， https://tensorflow
 
 2.pytorch1.4.0
 
-both of them run on GPU
+both of them run on GPU 
 
 ### prepare data sets
 
