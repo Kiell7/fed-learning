@@ -4,10 +4,13 @@ from tqdm import tqdm
 import numpy as np
 import torch
 import torch.nn.functional as F
+import torch.nn as nn
 from torch import optim
 from Models import Mnist_2NN, Mnist_CNN
-from clients import ClientsGroup, client
+from clients import ClientsGroup
 from pyrootutils.pyrootutils import setup_root
+from torchvision import models
+from transformers import ViTConfig, ViTForImageClassification
 
 root = setup_root(".", ".root", pythonpath=True)
 
@@ -23,14 +26,16 @@ parser.add_argument('-nc', '--num_of_clients', type=int, default=100, help='nume
 parser.add_argument('-cf', '--cfraction', type=float, default=0.1, help='C fraction, 0 means 1 client, 1 means total clients')
 parser.add_argument('-E', '--epoch', type=int, default=5, help='local train epoch')
 parser.add_argument('-B', '--batchsize', type=int, default=10, help='local train batch size')
-parser.add_argument('-mn', '--model_name', type=str, default='mnist_2nn', help='the model to train')
+parser.add_argument('-mn', '--model_name', type=str, default='resnet18', help='the model to train')
 parser.add_argument('-lr', "--learning_rate", type=float, default=0.01, help="learning rate, \
                     use value from origin paper as default")
-parser.add_argument('-vf', "--val_freq", type=int, default=5, help="model validation frequency(of communications)")
+parser.add_argument('-vf', "--val_freq", type=int, default=1, help="model validation frequency(of communications)")
 parser.add_argument('-sf', '--save_freq', type=int, default=20, help='global model save frequency(of communication)')
 parser.add_argument('-ncomm', '--num_comm', type=int, default=1000, help='number of communications')
 parser.add_argument('-sp', '--save_path', type=str, default='./checkpoints', help='the saving path of checkpoints')
 parser.add_argument('-iid', '--IID', type=int, default=0, help='the way to allocate data to clients')
+parser.add_argument('-dsn', '--dataset_name', type=str, default='cifar10', help='dataset name')
+parser.add_argument('-bss', '--backslash_step', type=int, default='10', help='dataset name')
 
 
 def test_mkdir(path):
@@ -52,6 +57,27 @@ if __name__=="__main__":
         net = Mnist_2NN()
     elif args['model_name'] == 'mnist_cnn':
         net = Mnist_CNN()
+    elif args['model_name'] == 'resnet18':
+        net = models.resnet18(pretrained=False)
+        num_ftrs = net.fc.in_features
+        net.fc = nn.Linear(num_ftrs, 10)
+    elif args['model_name'] == 'vit-base':
+        # 创建ViT配置
+        config = ViTConfig(
+            image_size=224,
+            patch_size=16,
+            num_channels=3,
+            num_labels=10,
+            hidden_size=768,
+            num_hidden_layers=12,
+            num_attention_heads=12,
+            intermediate_size=3072,
+            hidden_dropout_prob=0.1,
+            attention_probs_dropout_prob=0.1,
+            initializer_range=0.02
+        )
+        # 创建随机初始化的ViT模型
+        net = ViTForImageClassification(config)
 
     # 在这里添加BackSlash
     gt = torch.load(f"{root}/tables/gamma_table.pt", weights_only=True)
@@ -62,7 +88,7 @@ if __name__=="__main__":
     lengths = cal_gradient_length(params, 16)
     print(lengths)
 
-    for _ in range(300):
+    for _ in range(args["backslash_step"]):
         backslash(net, gt, rgt, 1e5)
 
     shape, std, N = eva_shape_param(net, gt, rgt)
@@ -79,7 +105,7 @@ if __name__=="__main__":
     loss_func = F.cross_entropy
     opti = optim.SGD(net.parameters(), lr=args['learning_rate'])
 
-    myClients = ClientsGroup('mnist', args['IID'], args['num_of_clients'], dev)
+    myClients = ClientsGroup(args['dataset_name'], args['IID'], args['num_of_clients'], dev)
     testDataLoader = myClients.test_data_loader
 
     num_in_comm = int(max(args['num_of_clients'] * args['cfraction'], 1))
