@@ -14,10 +14,11 @@ from transformers import ViTConfig, ViTForImageClassification
 
 root = setup_root(".", ".root", pythonpath=True)
 
-from utils.backslash import backslash
+from utils.backslash import backslash,l1
 from utils.params import eva_shape_param
 from utils.codelength import cal_gradient_length
 from utils.params import get_params
+from utils.status import get_model_status
 
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="FedAvg")
@@ -26,18 +27,20 @@ parser.add_argument('-nc', '--num_of_clients', type=int, default=100, help='nume
 parser.add_argument('-cf', '--cfraction', type=float, default=0.1, help='C fraction, 0 means 1 client, 1 means total clients')
 parser.add_argument('-E', '--epoch', type=int, default=5, help='local train epoch')
 parser.add_argument('-B', '--batchsize', type=int, default=10, help='local train batch size')
-parser.add_argument('-mn', '--model_name', type=str, default='resnet18', help='the model to train')
+parser.add_argument('-mn', '--model_name', type=str, default='vit-base', help='the model to train')
 parser.add_argument('-lr', "--learning_rate", type=float, default=0.001, help="learning rate, \
                     use value from origin paper as default")
-parser.add_argument('-vf', "--val_freq", type=int, default=1, help="model validation frequency(of communications)")
+parser.add_argument('-vf', "--val_freq", type=int, default=5, help="model validation frequency(of communications)")
 parser.add_argument('-sf', '--save_freq', type=int, default=20, help='global model save frequency(of communication)')
-parser.add_argument('-ncomm', '--num_comm', type=int, default=1000, help='number of communications')
+parser.add_argument('-ncomm', '--num_comm', type=int, default=10, help='number of communications')
 parser.add_argument('-sp', '--save_path', type=str, default='./checkpoints', help='the saving path of checkpoints')
 parser.add_argument('-iid', '--IID', type=int, default=0, help='the way to allocate data to clients')
-parser.add_argument('-dsn', '--dataset_name', type=str, default='cifar10', help='dataset name')
-parser.add_argument('-bs', '--backslash', type=int, default='0', help='if use backslash or not')
-parser.add_argument('-bss', '--backslash_step', type=int, default='300', help='dataset name')
-
+parser.add_argument('-dsn', '--dataset_name', type=str, default='mnist', help='dataset name')
+parser.add_argument('-bs', '--backslash', type=int, default=0, help='if use backslash or not')
+parser.add_argument('-bss', '--backslash_step', type=int, default=500, help='dataset name')
+parser.add_argument('-rdo', '--rdo_coef', type=int, default=500, help='rate distortion constrained optim')
+parser.add_argument('-qs', '--quantizer_step', type=int, default=8, help='quantizer step')
+parser.add_argument('-pt', '--pretrained', type=int, default=0, help='use pretrained model or not')
 
 def test_mkdir(path):
     if not os.path.isdir(path):
@@ -59,44 +62,48 @@ if __name__=="__main__":
     elif args['model_name'] == 'mnist_cnn':
         net = Mnist_CNN()
     elif args['model_name'] == 'resnet18':
-        net = models.resnet18(pretrained=False)
+        net = models.resnet18(pretrained=args['pretrained'])
         num_ftrs = net.fc.in_features
         net.fc = nn.Linear(num_ftrs, 10)
     elif args['model_name'] == 'vit-base':
-        # 创建ViT配置
-        config = ViTConfig(
-            image_size=224,
-            patch_size=16,
-            num_channels=3,
-            num_labels=10,
-            hidden_size=768,
-            num_hidden_layers=12,
-            num_attention_heads=12,
-            intermediate_size=3072,
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            initializer_range=0.02
-        )
-        # 创建随机初始化的ViT模型
-        net = ViTForImageClassification(config)
+        if args['pretrained']:
+            net = ViTForImageClassification.from_pretrained(
+                "google/vit-base-patch16-224",
+                num_labels=10,  # 根据您的任务修改类别数
+                ignore_mismatched_sizes=True  # 忽略分类头尺寸不匹配
+            )
+        else:
+            # 创建ViT配置
+            config = ViTConfig(
+                image_size=224,
+                patch_size=16,
+                num_channels=3,
+                num_labels=10,
+                hidden_size=768,
+                num_hidden_layers=12,
+                num_attention_heads=12,
+                intermediate_size=3072,
+                hidden_dropout_prob=0.1,
+                attention_probs_dropout_prob=0.1,
+                initializer_range=0.02
+            )
+            # 创建随机初始化的ViT模型
+            net = ViTForImageClassification(config)
 
-    # 在这里添加BackSlash
-    gt = torch.load(f"{root}/tables/gamma_table.pt", weights_only=True)
-    rgt = torch.load(f"{root}/tables/r_gamma_table.pt", weights_only=True)
-    shape, std, N = eva_shape_param(net, gt, rgt)
-    print("Before BackSlash:", shape, std, N)
-    params = get_params(net)
-    lengths = cal_gradient_length(params, 16)
-    print(lengths)
+    if args["backslash"]:
+        # BackSlash开始
+        model_status_begin, params = get_model_status(net, return_params=True,quantizer_step=args['quantizer_step'])
+        print("Before BackSlash: ", model_status_begin)
 
-    for _ in range(args["backslash_step"]):
-        backslash(net, gt, rgt, 1e5)
+        gt = torch.load(f"{root}/tables/gamma_table.pt", weights_only=True)
+        rgt = torch.load(f"{root}/tables/r_gamma_table.pt", weights_only=True)
+        for _ in range(args["backslash_step"]):
+            # backslash(net, gt, rgt, 1e7)
+            l1(net, args["rdo_coef"])
 
-    shape, std, N = eva_shape_param(net, gt, rgt)
-    print("After BackSlash", shape, std, N)
-    params = get_params(net)
-    lengths = cal_gradient_length(params, 16)
-    print(lengths)
+        model_status_end, params = get_model_status(net, return_params=True,quantizer_step=args['quantizer_step'])
+        print("After BackSlash: ", model_status_end)
+        # BackSlash结束
 
     if torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -136,8 +143,9 @@ if __name__=="__main__":
         for var in global_parameters:
             global_parameters[var] = (sum_parameters[var] / num_in_comm)
 
+        net.load_state_dict(global_parameters, strict=True)
         params=get_params(net)
-        lengths = cal_gradient_length(params, 16)
+        lengths = cal_gradient_length(params, args["quantizer_step"])
         print(f"lengths:{lengths}")
 
         with torch.no_grad():
@@ -148,6 +156,9 @@ if __name__=="__main__":
                 for data, label in testDataLoader:
                     data, label = data.to(dev), label.to(dev)
                     preds = net(data)
+                    # 这里面如果是从transformers加载的模型，输出为一个特定的类，而非直接给出预测结果
+                    if not isinstance(preds, torch.Tensor):
+                        preds = preds.logits
                     preds = torch.argmax(preds, dim=1)
                     sum_accu += (preds == label).float().mean()
                     num += 1

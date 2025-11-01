@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+from transformers.modeling_outputs import ImageClassifierOutput
+
 from get_dataset import GetDataset,CustomDataset
 import utils.transform as transform
 
@@ -27,6 +29,9 @@ class client(object):
 
                 # 前向传播
                 preds = Net(data)
+                # 这里面如果是从transformers加载的模型，输出为一个特定的类，而非直接给出预测结果
+                if not isinstance(preds, torch.Tensor):
+                    preds = preds.logits
                 loss = lossFun(preds, label)
 
                 if if_prox:
@@ -65,12 +70,12 @@ class ClientsGroup(object):
 
     def dataSetBalanceAllocation(self):
         if self.data_set_name == "mnist":
-            train_dataset, test_dataset = GetDataset("mnist","../data").get_dataset()
+            train_dataset, test_dataset = GetDataset("mnist","./data").get_dataset()
             client_transform = transform.mnist_transform_client
             train_data = train_dataset.train_data
             train_label = train_dataset.train_labels
         elif self.data_set_name == "cifar10":
-            train_dataset, test_dataset = GetDataset("cifar10", "../data").get_dataset()
+            train_dataset, test_dataset = GetDataset("cifar10", "./data").get_dataset()
             client_transform = transform.cifar10_transform_client
             train_data = torch.tensor(train_dataset.data, dtype=torch.float32).permute(0, 3, 1, 2)
             train_label = torch.tensor(train_dataset.targets, dtype=torch.int64)
