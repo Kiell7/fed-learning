@@ -18,8 +18,8 @@ def get_params(net):
 
 def gg_param(param):
     "计算广义高斯参数"
-    gt = torch.load("/mnt/hbnas/home/wujun/data/gamma_table.pt")
-    rgt = torch.load("/mnt/hbnas/home/wujun/data/r_gamma_table.pt")
+    gt = torch.load("/mnt/hbnas/home/wujun/data/gamma_table.pt", weights_only=True)
+    rgt = torch.load("/mnt/hbnas/home/wujun/data/r_gamma_table.pt", weights_only=True)
     param = param.cpu()
 
     n = param.shape[0]

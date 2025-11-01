@@ -1,6 +1,6 @@
 import torch
 
-def backslash(model, gamma_table, r_gamma_table, rdo=1e6):
+def backslash(model, gamma_table, r_gamma_table, rdo=1e5):
     with torch.no_grad():
         device = torch.device("cuda:0")
         n, var, mean = 0, 0, 0
@@ -23,3 +23,11 @@ def backslash(model, gamma_table, r_gamma_table, rdo=1e6):
             param.data -= constant * param_reg
         distribution = {"shape": shape, "standard": std}
     return distribution
+
+def l1(model, rdo=1e2):
+    with torch.no_grad():
+        N = 0
+        for param in model.parameters():
+            N += param.numel()
+        for param in model.parameters():
+            param.data -= rdo / N * torch.sign(param.data)
