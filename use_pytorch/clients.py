@@ -11,15 +11,37 @@ class client(object):
         self.train_dl = None
         self.local_parameters = None
 
-    def localUpdate(self, localEpoch, localBatchSize, Net, lossFun, opti, global_parameters):
+    def localUpdate(self, localEpoch, localBatchSize, Net, lossFun, opti, global_parameters,mu=0.01,if_prox=False):
+        # 保存全局参数用于近端项计算
+        global_params_copy = {}
+        for key, param in global_parameters.items():
+            global_params_copy[key] = param.clone().to(self.dev)
+
+        # 加载全局参数到本地模型
         Net.load_state_dict(global_parameters, strict=True)
         self.train_dl = DataLoader(self.train_ds, batch_size=localBatchSize, shuffle=True)
+
         for epoch in range(localEpoch):
             for data, label in self.train_dl:
                 data, label = data.to(self.dev), label.to(self.dev)
+
+                # 前向传播
                 preds = Net(data)
                 loss = lossFun(preds, label)
-                loss.backward()
+
+                if if_prox:
+                    # FedProx近端项：计算当前参数与全局参数的差异
+                    prox_term = 0.0
+                    for name, param in Net.named_parameters():
+                        if name in global_params_copy:
+                            prox_term += torch.norm(param - global_params_copy[name]) ** 2
+                    # 总损失 = 原始损失 + 近端正则项
+                    total_loss = loss + (mu / 2) * prox_term
+                else:
+                    total_loss = loss
+
+                # 反向传播
+                total_loss.backward()
                 opti.step()
                 opti.zero_grad()
 

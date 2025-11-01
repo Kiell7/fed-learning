@@ -8,8 +8,9 @@
 '''
 from torchvision import datasets
 from torch.utils.data import Dataset,DataLoader
-import utils.transform as transform
-
+import sys,os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import transform
 
 class GetDataset():
     def __init__(self,dataset_name,root):

@@ -77,7 +77,7 @@ def cal_gradient_length(weights, quantizer_step=16):
     codes = quantizer(weights, quantizer_step)
     eles = resort(codes)
     eg = cal_eg_length(eles)
-    # huff = cal_huffman_length(eles)
+    huff = cal_huffman_length(eles)
     fixed = cal_fix_length(eles)
     lengths = [round(float(i.cpu()), 4) for i in [eg, fixed]]
     return lengths

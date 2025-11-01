@@ -27,7 +27,7 @@ parser.add_argument('-cf', '--cfraction', type=float, default=0.1, help='C fract
 parser.add_argument('-E', '--epoch', type=int, default=5, help='local train epoch')
 parser.add_argument('-B', '--batchsize', type=int, default=10, help='local train batch size')
 parser.add_argument('-mn', '--model_name', type=str, default='resnet18', help='the model to train')
-parser.add_argument('-lr', "--learning_rate", type=float, default=0.01, help="learning rate, \
+parser.add_argument('-lr', "--learning_rate", type=float, default=0.001, help="learning rate, \
                     use value from origin paper as default")
 parser.add_argument('-vf', "--val_freq", type=int, default=1, help="model validation frequency(of communications)")
 parser.add_argument('-sf', '--save_freq', type=int, default=20, help='global model save frequency(of communication)')
@@ -35,7 +35,8 @@ parser.add_argument('-ncomm', '--num_comm', type=int, default=1000, help='number
 parser.add_argument('-sp', '--save_path', type=str, default='./checkpoints', help='the saving path of checkpoints')
 parser.add_argument('-iid', '--IID', type=int, default=0, help='the way to allocate data to clients')
 parser.add_argument('-dsn', '--dataset_name', type=str, default='cifar10', help='dataset name')
-parser.add_argument('-bss', '--backslash_step', type=int, default='10', help='dataset name')
+parser.add_argument('-bs', '--backslash', type=int, default='0', help='if use backslash or not')
+parser.add_argument('-bss', '--backslash_step', type=int, default='300', help='dataset name')
 
 
 def test_mkdir(path):
@@ -103,7 +104,7 @@ if __name__=="__main__":
     net = net.to(dev)
 
     loss_func = F.cross_entropy
-    opti = optim.SGD(net.parameters(), lr=args['learning_rate'])
+    opti = optim.Adam(net.parameters(), lr=args['learning_rate'])
 
     myClients = ClientsGroup(args['dataset_name'], args['IID'], args['num_of_clients'], dev)
     testDataLoader = myClients.test_data_loader
@@ -134,6 +135,10 @@ if __name__=="__main__":
 
         for var in global_parameters:
             global_parameters[var] = (sum_parameters[var] / num_in_comm)
+
+        params=get_params(net)
+        lengths = cal_gradient_length(params, 16)
+        print(f"lengths:{lengths}")
 
         with torch.no_grad():
             if (i + 1) % args['val_freq'] == 0:

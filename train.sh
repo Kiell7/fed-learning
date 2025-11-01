@@ -1,8 +1,14 @@
-python use_pytorch/server.py -nc 100 -cf 0.1 -E 1 -B 10 -mn mnist_cnn -ncomm 10 -iid 0 -lr 0.01 -vf 1 -g 0 -sf 5
+python use_pytorch/server.py -g 0 -nc 100 -cf 0.1 -E 1 -B 10 -mn resnet18 -lr 0.001 -vf 5 -sf 5 -ncomm 10 -dsn mnist -bs 1 -bss 300
+-g 占用的GPU编号
 -nc 客户端数量
 -cf 通信比例
 -E 每次通信前每个客户端的训练轮数
--B Batch Size
+-B 客户端的Batch Size
+-mn 使用的模型名
 -lr 学习率
--ncomm 一共的通信次数
+-vf 每通讯多少次验证一次
 -sf 存储频率
+-ncomm 一共的通信次数
+-dsn 使用的数据集名称
+-bs 是否使用backslash
+-bss backslash的轮次
