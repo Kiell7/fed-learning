@@ -35,24 +35,38 @@ mnist_transform_client = transforms.Compose([
                          std=[0.229, 0.224, 0.225])
 ])
 
+# cifar10_transform = transforms.Compose([
+#     # 转换为Tensor并归一化到[0,1]
+#     transforms.ToTensor(),
+#     # 使用ImageNet的均值和标准差进行归一化（ResNet预训练权重使用这些值）
+#     transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+#                          std=[0.2023, 0.1994, 0.2010])
+# ])
+#
+# cifar10_transform_client = transforms.Compose([
+#     transforms.ToPILImage(),
+#     transforms.RandomCrop(32, padding=4),
+#     transforms.RandomHorizontalFlip(p=0.5),
+#     transforms.ToTensor(),
+#     transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+#                          std=[0.2023, 0.1994, 0.2010])
+# ])
+
 cifar10_transform = transforms.Compose([
-    # 调整图像大小到ResNet的标准输入尺寸
     transforms.Resize((224, 224)),
     # 转换为Tensor并归一化到[0,1]
     transforms.ToTensor(),
     # 使用ImageNet的均值和标准差进行归一化（ResNet预训练权重使用这些值）
-    transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                         std=[0.229, 0.224, 0.225])
+    transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+                         std=[0.2023, 0.1994, 0.2010])
 ])
 
 cifar10_transform_client = transforms.Compose([
-    # 首先将Tensor转换为PIL Image（假设数据是numpy格式的灰度图）
     transforms.ToPILImage(),
-    # 调整图像大小到ResNet的标准输入尺寸
     transforms.Resize((224, 224)),
-    # 转换为Tensor并归一化到[0,1]
+    transforms.RandomCrop(224, padding=28),
+    transforms.RandomHorizontalFlip(p=0.5),
     transforms.ToTensor(),
-    # 使用ImageNet的均值和标准差进行归一化（ResNet预训练权重使用这些值）
-    transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                         std=[0.229, 0.224, 0.225])
+    transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+                         std=[0.2023, 0.1994, 0.2010])
 ])

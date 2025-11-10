@@ -17,30 +17,33 @@ root = setup_root(".", ".root", pythonpath=True)
 from utils.backslash import backslash,l1
 from utils.params import eva_shape_param
 from utils.codelength import cal_gradient_length
+from utils.warmup import WarmupScheduler
 from utils.params import get_params
 from utils.status import get_model_status
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="FedAvg")
 parser.add_argument('-g', '--gpu', type=str, default='0', help='gpu id to use(e.g. 0,1,2,3)')
 parser.add_argument('-nc', '--num_of_clients', type=int, default=100, help='numer of the clients')
-parser.add_argument('-cf', '--cfraction', type=float, default=0.1, help='C fraction, 0 means 1 client, 1 means total clients')
-parser.add_argument('-E', '--epoch', type=int, default=5, help='local train epoch')
-parser.add_argument('-B', '--batchsize', type=int, default=10, help='local train batch size')
-parser.add_argument('-mn', '--model_name', type=str, default='vit-base', help='the model to train')
+parser.add_argument('-cf', '--cfraction', type=float, default=0.01, help='C fraction, 0 means 1 client, 1 means total clients')
+parser.add_argument('-E', '--epoch', type=int, default=3, help='local train epoch')
+parser.add_argument('-B', '--batchsize', type=int, default=32, help='local train batch size')
+parser.add_argument('-mn', '--model_name', type=str, default='resnet18', help='the model to train')
 parser.add_argument('-lr', "--learning_rate", type=float, default=0.001, help="learning rate, \
                     use value from origin paper as default")
-parser.add_argument('-vf', "--val_freq", type=int, default=5, help="model validation frequency(of communications)")
+parser.add_argument('-vf', "--val_freq", type=int, default=1, help="model validation frequency(of communications)")
 parser.add_argument('-sf', '--save_freq', type=int, default=20, help='global model save frequency(of communication)')
-parser.add_argument('-ncomm', '--num_comm', type=int, default=10, help='number of communications')
+parser.add_argument('-ncomm', '--num_comm', type=int, default=100, help='number of communications')
 parser.add_argument('-sp', '--save_path', type=str, default='./checkpoints', help='the saving path of checkpoints')
 parser.add_argument('-iid', '--IID', type=int, default=0, help='the way to allocate data to clients')
-parser.add_argument('-dsn', '--dataset_name', type=str, default='mnist', help='dataset name')
-parser.add_argument('-bs', '--backslash', type=int, default=0, help='if use backslash or not')
+parser.add_argument('-dsn', '--dataset_name', type=str, default='cifar10', help='dataset name')
+parser.add_argument('-bs', '--backslash', type=int, default=1, help='if use backslash or not')
 parser.add_argument('-bss', '--backslash_step', type=int, default=500, help='dataset name')
 parser.add_argument('-rdo', '--rdo_coef', type=int, default=500, help='rate distortion constrained optim')
 parser.add_argument('-qs', '--quantizer_step', type=int, default=8, help='quantizer step')
-parser.add_argument('-pt', '--pretrained', type=int, default=0, help='use pretrained model or not')
+parser.add_argument('-pt', '--pretrained', type=int, default=1, help='use pretrained model or not')
+parser.add_argument('-prox', '--prox', type=int, default=0, help='use prox algorithm or not')
 
 def test_mkdir(path):
     if not os.path.isdir(path):
@@ -50,6 +53,11 @@ def test_mkdir(path):
 if __name__=="__main__":
     args = parser.parse_args()
     args = args.__dict__
+
+    # 打印参数
+    print("===================== hyperparameter =====================")
+    for k,v in args.items():
+        print(k,v)
 
     test_mkdir(args['save_path'])
 
@@ -63,20 +71,21 @@ if __name__=="__main__":
         net = Mnist_CNN()
     elif args['model_name'] == 'resnet18':
         net = models.resnet18(pretrained=args['pretrained'])
-        num_ftrs = net.fc.in_features
-        net.fc = nn.Linear(num_ftrs, 10)
+        net.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        net.maxpool = nn.Identity()  # 移除第一个maxpool
+        net.fc = nn.Linear(512, 10)  # CIFAR-10有10类
     elif args['model_name'] == 'vit-base':
         if args['pretrained']:
             net = ViTForImageClassification.from_pretrained(
                 "google/vit-base-patch16-224",
                 num_labels=10,  # 根据您的任务修改类别数
-                ignore_mismatched_sizes=True  # 忽略分类头尺寸不匹配
+                ignore_mismatched_sizes=True,  # 忽略分类头尺寸不匹配
             )
         else:
             # 创建ViT配置
             config = ViTConfig(
-                image_size=224,
-                patch_size=16,
+                image_size=32,
+                patch_size=4,
                 num_channels=3,
                 num_labels=10,
                 hidden_size=768,
@@ -112,6 +121,12 @@ if __name__=="__main__":
 
     loss_func = F.cross_entropy
     opti = optim.Adam(net.parameters(), lr=args['learning_rate'])
+    #opti = optim.SGD(net.parameters(), lr=args['learning_rate'],
+    #                 momentum=0.9, weight_decay=5e-4)
+    # scheduler = torch.optim.lr_scheduler.MultiStepLR(opti,
+    #                                                  milestones=[100, 150], gamma=0.1)
+    # cosine_scheduler = CosineAnnealingLR(opti, T_max=200)
+    # scheduler = WarmupScheduler(opti, 20, cosine_scheduler)
 
     myClients = ClientsGroup(args['dataset_name'], args['IID'], args['num_of_clients'], dev)
     testDataLoader = myClients.test_data_loader
@@ -129,9 +144,13 @@ if __name__=="__main__":
         clients_in_comm = ['client{}'.format(i) for i in order[0:num_in_comm]]
 
         sum_parameters = None
+        total_loss=0
+        total_acc=0
         for client in tqdm(clients_in_comm):
-            local_parameters = myClients.clients_set[client].localUpdate(args['epoch'], args['batchsize'], net,
+            local_parameters,local_loss,acc = myClients.clients_set[client].localUpdate(args['epoch'], args['batchsize'], net,
                                                                          loss_func, opti, global_parameters)
+            total_loss += local_loss
+            total_acc += acc
             if sum_parameters is None:
                 sum_parameters = {}
                 for key, var in local_parameters.items():
@@ -146,7 +165,9 @@ if __name__=="__main__":
         net.load_state_dict(global_parameters, strict=True)
         params=get_params(net)
         lengths = cal_gradient_length(params, args["quantizer_step"])
-        print(f"lengths:{lengths}")
+        loss=total_loss/num_in_comm
+        acc=total_acc/num_in_comm
+        print(f"loss:{loss} | acc:{acc} | lengths:{lengths}")
 
         with torch.no_grad():
             if (i + 1) % args['val_freq'] == 0:

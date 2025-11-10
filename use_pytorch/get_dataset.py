@@ -23,7 +23,7 @@ class GetDataset():
                 root=self.root,
                 train=True,
                 download=True,
-                transform=transform.mnist_transform
+                transform=transform.mnist_transform_client
             )
 
             test_dataset = datasets.MNIST(
@@ -36,14 +36,14 @@ class GetDataset():
             train_dataset = datasets.CIFAR10(
                 root=self.root,
                 train=True,
-                download=True,
-                transform=transform.cifar10_transform
+                download=False,
+                transform=transform.cifar10_transform_client
             )
 
             test_dataset = datasets.CIFAR10(
                 root=self.root,
                 train=False,
-                download=True,
+                download=False,
                 transform=transform.cifar10_transform
             )
         else:

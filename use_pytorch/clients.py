@@ -24,6 +24,8 @@ class client(object):
         self.train_dl = DataLoader(self.train_ds, batch_size=localBatchSize, shuffle=True)
 
         for epoch in range(localEpoch):
+            sum_accu = 0
+            num = 0
             for data, label in self.train_dl:
                 data, label = data.to(self.dev), label.to(self.dev)
 
@@ -32,6 +34,8 @@ class client(object):
                 # 这里面如果是从transformers加载的模型，输出为一个特定的类，而非直接给出预测结果
                 if not isinstance(preds, torch.Tensor):
                     preds = preds.logits
+                sum_accu += (torch.argmax(preds, dim=1) == label).float().mean()
+                num += 1
                 loss = lossFun(preds, label)
 
                 if if_prox:
@@ -50,7 +54,10 @@ class client(object):
                 opti.step()
                 opti.zero_grad()
 
-        return Net.state_dict()
+            #scheduler.step()
+            acc=sum_accu / num
+
+        return Net.state_dict(),total_loss,acc
 
     def local_val(self):
         pass
@@ -77,7 +84,7 @@ class ClientsGroup(object):
         elif self.data_set_name == "cifar10":
             train_dataset, test_dataset = GetDataset("cifar10", "./data").get_dataset()
             client_transform = transform.cifar10_transform_client
-            train_data = torch.tensor(train_dataset.data, dtype=torch.float32).permute(0, 3, 1, 2)
+            train_data = torch.tensor(train_dataset.data, dtype=torch.float32).permute(0, 3, 1, 2) / 255.0
             train_label = torch.tensor(train_dataset.targets, dtype=torch.int64)
         else:
             raise ValueError("data_set_name must be MNIST or CIFAR10")
@@ -99,7 +106,6 @@ class ClientsGroup(object):
             local_label = torch.cat((label_shards1, label_shards2), dim=0)
             someone = client(CustomDataset(local_data, local_label, client_transform), self.dev)
             self.clients_set['client{}'.format(i)] = someone
-
 
 if __name__ == "__main__":
     MyClients = ClientsGroup('mnist', True, 100, 1)
