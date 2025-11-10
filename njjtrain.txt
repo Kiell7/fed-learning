@@ -1,0 +1,81 @@
+# lstm_IMDB对比
+python server.py -mn lstm -vs 10000 -dsn imdb -nc 100 -cf 0.1 -E 5 -B 128 -lr 0.001 -ncomm 500 -sf 500
+python server.py -mn lstm -vs 10000 -dsn imdb -nc 100 -cf 0.1 -E 5 -B 128 -lr 0.001 -ncomm 500 -sf 500 -bs 1 -rdo 1000
+python server.py -mn lstm -vs 10000 -dsn imdb -nc 100 -cf 0.1 -E 5 -B 128 -lr 0.001 -ncomm 500 -sf 500 -bs 1 -rdo 1e6 -bss 300
+
+# Bert_IMDB对比
+python server.py -mn bert -dsn imdb -nc 100 -cf 0.1 -E 2 -B 32 -lr 0.00002 -ncomm 100 -sf 15
+python server.py -mn bert -dsn imdb -nc 100 -cf 0.1 -E 2 -B 32 -lr 0.00002 -ncomm 100 -sf 15 -bs 1 -rdo 1e6 -bss 300 ***换一下
+
+# Bert_SQUAD对比
+python server.py -mn bert -dsn squad -nc 20 -cf 0.5 -E 2 -B 16 -lr 0.00002 -ncomm 100 -sf 50
+python server.py -mn bert -dsn squad -nc 20 -cf 0.5 -E 2 -B 16 -lr 0.00002 -ncomm 100 -sf 50 -bs 1 -rdo 5000 -bss 300
+
+
+
+
+
+-mn lstm
+参数全称：--model_name
+含义：选择使用LSTM模型架构
+
+-vs 10000
+参数全称：--vocab_size
+含义：设置词汇表大小为10000，即模型将使用文本中最常见的10000个词
+
+-dsn imdb
+参数全称：--dataset_name
+含义：使用IMDB数据集进行训练
+
+-nc 100
+参数全称：--num_of_clients
+含义：设置联邦学习中客户端的数量为100个
+
+-cf 0.1
+参数全称：--cfraction
+含义：每轮训练选择10%的客户端参与，即每轮会随机选择10个客户端
+
+-E 5
+参数全称：--epoch
+含义：每个客户端在本地训练5个epoch
+
+-B 32
+参数全称：--batchsize
+含义：训练时的批次大小为32，即每次处理32个样本
+
+-lr 0.001
+参数全称：--learning_rate
+含义：设置学习率为0.001，用于模型优化
+
+-ncomm
+通讯轮数
+
+-sf 50
+几轮保存一次checkpoint
+
+-bs 1 
+ 启用 backslash 稀疏化
+
+-rdo 1000
+"Loss = Distortion + λ × Rate"中的 λ ，越大表示压缩率越强,稀疏化效果越大
+
+-bss 500
+BackSlash 迭代500次
+
+结果说明：
+lengths:[12.1003, 8.6603, 11.0]
+这三个值代表梯度压缩编码的平均码长，用于评估不同编码方法的压缩效果
+Exp-Golomb (指数哥伦布) 编码的平均码长
+Huffman (霍夫曼) 编码的平均码长
+Fixed-Length (固定长度) 编码的平均码长
+表示传输每个梯度参数平均需要多少比特(bits)，用于衡量联邦学习中通信效率
+
+
+
+
+
+
+
+
+
+清华源下载：pip install 包名 -i https://pypi.tuna.tsinghua.edu.cn/simple
